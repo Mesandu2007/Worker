@@ -4,7 +4,7 @@ import java.time.LocalDateTime;
 
 public class NotificationDTO {
 
-    // Used when returning a notification
+    
     public static class Response {
 
         private Long id;

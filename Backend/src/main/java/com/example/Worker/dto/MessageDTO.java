@@ -32,7 +32,7 @@ public class MessageDTO {
         }
     }
 
-    // Used when returning a message
+    
     public static class Response {
 
         private Long id;

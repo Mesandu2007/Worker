@@ -60,6 +60,7 @@ public class AuthDTO {
         private String email;
         private String password;
         private String name;
+        private String type;
         private String phone;
         private String location;
         private String description;
@@ -93,6 +94,15 @@ public class AuthDTO {
 
         public void setName(String name) {
             this.name = name;
+        }
+
+
+        public String getType(){
+            return type;
+        }
+
+        public void setType(String type){
+            this.type=type;
         }
 
         public String getPhone() {

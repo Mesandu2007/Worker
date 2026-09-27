@@ -28,6 +28,10 @@ public class Worker {
     @Column(nullable=false)
     private String name;
 
+
+    @Column(nullable=false)
+    private String type;
+
     @Column(nullable=false)
     private String phone;
 
@@ -53,6 +57,7 @@ public class Worker {
                   String password,
                   Role role,
                   String name,
+                  String type,
                   String phone,
                   String location,
                   String description,
@@ -66,6 +71,7 @@ public class Worker {
         this.password=password;
         this.role=role;
         this.name=name;
+        this.type=type;
         this.phone = phone;
         this.location = location;
         this.description = description;
@@ -128,6 +134,15 @@ public class Worker {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
     }
 
 

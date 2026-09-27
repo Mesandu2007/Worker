@@ -4,14 +4,22 @@ import com.example.Worker.entity.Worker;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.List;
 import java.util.Optional;
 
-
-
-
-public interface WorkerRepository extends JpaRepository<Worker, Long>{
+public interface WorkerRepository extends JpaRepository<Worker, Long> {
 
     Optional<Worker> findByEmail(String email);
 
     boolean existsByEmail(String email);
+
+    
+    List<Worker> findByTypeIgnoreCase(String type);
+
+    List<Worker> findByLocationIgnoreCase(String location);
+
+    List<Worker> findByTypeIgnoreCaseAndLocationIgnoreCase(
+            String type,
+            String location
+    );
 }

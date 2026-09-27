@@ -2,12 +2,14 @@ package com.example.Worker.dto;
 
 public class WorkerDTO {
 
+   
+
     public static class ProfileResponse {
 
         private Long id;
         private String email;
         private String name;
-
+        private String type;
         private String location;
         private String description;
         private String skills;
@@ -19,20 +21,23 @@ public class WorkerDTO {
         public ProfileResponse() {
         }
 
-        public ProfileResponse(Long id,
-                               String email,
-                               String name,
-                               String location,
-                               String description,
-                               String skills,
-                               Integer experience,
-                               Double hourlyRate,
-                               String availability,
-                               Double rating) {
-
+        public ProfileResponse(
+                Long id,
+                String email,
+                String name,
+                String type,
+                String location,
+                String description,
+                String skills,
+                Integer experience,
+                Double hourlyRate,
+                String availability,
+                Double rating
+        ) {
             this.id = id;
             this.email = email;
             this.name = name;
+            this.type = type;
             this.location = location;
             this.description = description;
             this.skills = skills;
@@ -64,6 +69,14 @@ public class WorkerDTO {
 
         public void setName(String name) {
             this.name = name;
+        }
+
+        public String getType() {
+            return type;
+        }
+
+        public void setType(String type) {
+            this.type = type;
         }
 
         public String getLocation() {
@@ -124,9 +137,11 @@ public class WorkerDTO {
     }
 
 
+
     public static class UpdateRequest {
 
         private String name;
+        private String type;
         private String phone;
         private String location;
         private String description;
@@ -144,6 +159,14 @@ public class WorkerDTO {
 
         public void setName(String name) {
             this.name = name;
+        }
+
+        public String getType() {
+            return type;
+        }
+
+        public void setType(String type) {
+            this.type = type;
         }
 
         public String getPhone() {

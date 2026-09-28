@@ -73,7 +73,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         
 
             SimpleGrantedAuthority authority =
-                    new SimpleGrantedAuthority(role);
+                    new SimpleGrantedAuthority("ROLE_" + role);
 
 
     

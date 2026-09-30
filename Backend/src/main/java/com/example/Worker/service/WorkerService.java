@@ -103,7 +103,7 @@ public class WorkerService {
 
         
         else {
-            workers = workerRepository.findAll();
+            throw new RuntimeException("Please provide either type or location for search");
         }
 
         return workers.stream()

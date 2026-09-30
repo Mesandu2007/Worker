@@ -1,203 +1,405 @@
-package com.example.Worker.dto;
+package com.example.Worker.service;
 
+import com.example.Worker.dto.JobDTO;
+import com.example.Worker.entity.Customer;
+import com.example.Worker.entity.Job;
+import com.example.Worker.entity.Service;
+import com.example.Worker.entity.Worker;
 import com.example.Worker.enums.JobStatus;
-import org.springframework.web.multipart.MultipartFile;
+import com.example.Worker.repository.CustomerRepository;
+import com.example.Worker.repository.JobRepository;
+import com.example.Worker.repository.ServiceRepository;
+import com.example.Worker.repository.WorkerRepository;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
 
-public class JobDTO {
+@org.springframework.stereotype.Service
+public class JobService {
 
+    private final JobRepository jobRepository;
+    private final CustomerRepository customerRepository;
+    private final WorkerRepository workerRepository;
+    private final ServiceRepository serviceRepository;
+    private final CloudinaryService cloudinaryService;
+    private final NotificationService notificationService;
 
-    public static class CreateRequest {
-
-        private Long workerId;
-        private Long serviceId;
-        private String description;
-        private MultipartFile image;
-
-        public CreateRequest() {
-        }
-
-        public Long getWorkerId() {
-            return workerId;
-        }
-
-        public void setWorkerId(Long workerId) {
-            this.workerId = workerId;
-        }
-
-        public Long getServiceId() {
-            return serviceId;
-        }
-
-        public void setServiceId(Long serviceId) {
-            this.serviceId = serviceId;
-        }
-
-        public String getDescription() {
-            return description;
-        }
-
-        public void setDescription(String description) {
-            this.description = description;
-        }
-
-        public MultipartFile getImage() {
-            return image;
-        }
-
-        public void setImage(MultipartFile image) {
-            this.image = image;
-        }
+    public JobService(
+            JobRepository jobRepository,
+            CustomerRepository customerRepository,
+            WorkerRepository workerRepository,
+            ServiceRepository serviceRepository,
+            CloudinaryService cloudinaryService,
+            NotificationService notificationService
+    ) {
+        this.jobRepository = jobRepository;
+        this.customerRepository = customerRepository;
+        this.workerRepository = workerRepository;
+        this.serviceRepository = serviceRepository;
+        this.cloudinaryService = cloudinaryService;
+        this.notificationService = notificationService;
     }
 
+    // =========================================================
+    // CREATE JOB
+    // =========================================================
 
+    public JobDTO.Response createJob(JobDTO.CreateRequest request) {
 
-    public static class Response {
+        Long customerId = getCurrentUserId();
 
-        private Long id;
+        Customer customer = customerRepository.findById(customerId)
+                .orElseThrow(() ->
+                        new RuntimeException("Customer not found"));
 
-        private Long customerId;
-        private String customerName;
+        Worker worker = workerRepository.findById(request.getWorkerId())
+                .orElseThrow(() ->
+                        new RuntimeException("Worker not found"));
 
-        private Long workerId;
-        private String workerName;
+        Service service = serviceRepository.findById(request.getServiceId())
+                .orElseThrow(() ->
+                        new RuntimeException("Service not found"));
 
-        private Long serviceId;
-        private String serviceName;
+        String imageUrl = null;
 
-        private String description;
-        private String imageUrl;
+        if (request.getImage() != null &&
+                !request.getImage().isEmpty()) {
 
-        private JobStatus status;
-
-        private LocalDateTime createdAt;
-        private LocalDateTime updatedAt;
-
-        public Response() {
+            imageUrl = cloudinaryService.uploadImage(
+                    request.getImage()
+            );
         }
 
-        public Response(Long id,
-                        Long customerId,
-                        String customerName,
-                        Long workerId,
-                        String workerName,
-                        Long serviceId,
-                        String serviceName,
-                        String description,
-                        String imageUrl,
-                        JobStatus status,
-                        LocalDateTime createdAt,
-                        LocalDateTime updatedAt) {
+        Job job = new Job(
+                customer,
+                worker,
+                service,
+                request.getDescription(),
+                imageUrl
+        );
 
-            this.id = id;
-            this.customerId = customerId;
-            this.customerName = customerName;
-            this.workerId = workerId;
-            this.workerName = workerName;
-            this.serviceId = serviceId;
-            this.serviceName = serviceName;
-            this.description = description;
-            this.imageUrl = imageUrl;
-            this.status = status;
-            this.createdAt = createdAt;
-            this.updatedAt = updatedAt;
+        job.setStatus(JobStatus.PENDING);
+
+        Job savedJob = jobRepository.save(job);
+
+        // Notify selected worker
+        notificationService.createNotification(
+                null,
+                worker,
+                "New Job Request",
+                "You have received a new job request from "
+                        + customer.getName()
+        );
+
+        return convertToResponse(savedJob);
+    }
+
+    // =========================================================
+    // GET CUSTOMER'S JOBS
+    // =========================================================
+
+    public List<JobDTO.Response> getMyJobs() {
+
+        Long customerId = getCurrentUserId();
+
+        List<Job> jobs =
+                jobRepository.findByCustomerId(customerId);
+
+        return jobs.stream()
+                .map(this::convertToResponse)
+                .collect(Collectors.toList());
+    }
+
+    // =========================================================
+    // GET WORKER'S RECEIVED JOBS
+    // =========================================================
+
+    public List<JobDTO.Response> getReceivedJobs() {
+
+        Long workerId = getCurrentUserId();
+
+        List<Job> jobs =
+                jobRepository.findByWorkerId(workerId);
+
+        return jobs.stream()
+                .map(this::convertToResponse)
+                .collect(Collectors.toList());
+    }
+
+    // =========================================================
+    // ACCEPT JOB
+    // =========================================================
+
+    public JobDTO.Response acceptJob(Long jobId) {
+
+        Long workerId = getCurrentUserId();
+
+        Job job = getJob(jobId);
+
+        // Check worker owns this job request
+        if (!job.getWorker().getId().equals(workerId)) {
+            throw new RuntimeException(
+                    "You are not authorized to accept this job"
+            );
         }
 
-        public Long getId() {
-            return id;
+        // Only pending jobs can be accepted
+        if (job.getStatus() != JobStatus.PENDING) {
+            throw new RuntimeException(
+                    "Only pending jobs can be accepted"
+            );
         }
 
-        public void setId(Long id) {
-            this.id = id;
+        job.setStatus(JobStatus.ACCEPTED);
+        job.setAcceptedAt(LocalDateTime.now());
+
+        Job updatedJob = jobRepository.save(job);
+
+        // Notify customer
+        notificationService.createNotification(
+                job.getCustomer(),
+                null,
+                "Job Accepted",
+                "Your job request has been accepted by "
+                        + job.getWorker().getName()
+        );
+
+        return convertToResponse(updatedJob);
+    }
+
+    // =========================================================
+    // REJECT JOB
+    // =========================================================
+
+    public JobDTO.Response rejectJob(Long jobId) {
+
+        Long workerId = getCurrentUserId();
+
+        Job job = getJob(jobId);
+
+        // Check worker owns this job request
+        if (!job.getWorker().getId().equals(workerId)) {
+            throw new RuntimeException(
+                    "You are not authorized to reject this job"
+            );
         }
 
-        public Long getCustomerId() {
-            return customerId;
+        // Only pending jobs can be rejected
+        if (job.getStatus() != JobStatus.PENDING) {
+            throw new RuntimeException(
+                    "Only pending jobs can be rejected"
+            );
         }
 
-        public void setCustomerId(Long customerId) {
-            this.customerId = customerId;
+        job.setStatus(JobStatus.REJECTED);
+
+        Job updatedJob = jobRepository.save(job);
+
+        // Notify customer
+        notificationService.createNotification(
+                job.getCustomer(),
+                null,
+                "Job Rejected",
+                "Your job request has been rejected by "
+                        + job.getWorker().getName()
+        );
+
+        return convertToResponse(updatedJob);
+    }
+
+    // =========================================================
+    // CANCEL JOB
+    // =========================================================
+
+    public JobDTO.Response cancelJob(Long jobId) {
+
+        Long userId = getCurrentUserId();
+
+        Job job = getJob(jobId);
+
+        boolean isCustomer =
+                job.getCustomer().getId().equals(userId);
+
+        boolean isWorker =
+                job.getWorker().getId().equals(userId);
+
+        // User must be one of the participants
+        if (!isCustomer && !isWorker) {
+            throw new RuntimeException(
+                    "You are not authorized to cancel this job"
+            );
         }
 
-        public String getCustomerName() {
-            return customerName;
+        // Only accepted jobs can be cancelled
+        if (job.getStatus() != JobStatus.ACCEPTED) {
+            throw new RuntimeException(
+                    "Only accepted jobs can be cancelled"
+            );
         }
 
-        public void setCustomerName(String customerName) {
-            this.customerName = customerName;
+        job.setStatus(JobStatus.CANCELLED);
+
+        Job updatedJob = jobRepository.save(job);
+
+        // Customer cancelled
+        if (isCustomer) {
+
+            notificationService.createNotification(
+                    null,
+                    job.getWorker(),
+                    "Job Cancelled",
+                    "The customer has cancelled the job"
+            );
+
         }
 
-        public Long getWorkerId() {
-            return workerId;
+        // Worker cancelled
+        else {
+
+            notificationService.createNotification(
+                    job.getCustomer(),
+                    null,
+                    "Job Cancelled",
+                    "The worker has cancelled the job"
+            );
         }
 
-        public void setWorkerId(Long workerId) {
-            this.workerId = workerId;
+        return convertToResponse(updatedJob);
+    }
+
+    // =========================================================
+    // START JOB
+    // =========================================================
+
+    public JobDTO.Response startJob(Long jobId) {
+
+        Long workerId = getCurrentUserId();
+
+        Job job = getJob(jobId);
+
+        // Only assigned worker can start
+        if (!job.getWorker().getId().equals(workerId)) {
+            throw new RuntimeException(
+                    "You are not authorized to start this job"
+            );
         }
 
-        public String getWorkerName() {
-            return workerName;
+        // Job must be accepted first
+        if (job.getStatus() != JobStatus.ACCEPTED) {
+            throw new RuntimeException(
+                    "Only accepted jobs can be started"
+            );
         }
 
-        public void setWorkerName(String workerName) {
-            this.workerName = workerName;
+        job.setStatus(JobStatus.IN_PROGRESS);
+        job.setStartedAt(LocalDateTime.now());
+
+        Job updatedJob = jobRepository.save(job);
+
+        // Notify customer
+        notificationService.createNotification(
+                job.getCustomer(),
+                null,
+                "Job Started",
+                "The worker has started working on your job"
+        );
+
+        return convertToResponse(updatedJob);
+    }
+
+    // =========================================================
+    // COMPLETE JOB
+    // =========================================================
+
+    public JobDTO.Response completeJob(Long jobId) {
+
+        Long workerId = getCurrentUserId();
+
+        Job job = getJob(jobId);
+
+        // Only assigned worker can complete
+        if (!job.getWorker().getId().equals(workerId)) {
+            throw new RuntimeException(
+                    "You are not authorized to complete this job"
+            );
         }
 
-        public Long getServiceId() {
-            return serviceId;
+        // Job must be in progress
+        if (job.getStatus() != JobStatus.IN_PROGRESS) {
+            throw new RuntimeException(
+                    "Only jobs in progress can be completed"
+            );
         }
 
-        public void setServiceId(Long serviceId) {
-            this.serviceId = serviceId;
-        }
+        job.setStatus(JobStatus.COMPLETED);
+        job.setCompletedAt(LocalDateTime.now());
 
-        public String getServiceName() {
-            return serviceName;
-        }
+        Job updatedJob = jobRepository.save(job);
 
-        public void setServiceName(String serviceName) {
-            this.serviceName = serviceName;
-        }
+        // Notify customer
+        notificationService.createNotification(
+                job.getCustomer(),
+                null,
+                "Job Completed",
+                "The worker has completed your job"
+        );
 
-        public String getDescription() {
-            return description;
-        }
+        return convertToResponse(updatedJob);
+    }
 
-        public void setDescription(String description) {
-            this.description = description;
-        }
+    // =========================================================
+    // FIND JOB
+    // =========================================================
 
-        public String getImageUrl() {
-            return imageUrl;
-        }
+    private Job getJob(Long jobId) {
 
-        public void setImageUrl(String imageUrl) {
-            this.imageUrl = imageUrl;
-        }
+        return jobRepository.findById(jobId)
+                .orElseThrow(() ->
+                        new RuntimeException("Job not found"));
+    }
 
-        public JobStatus getStatus() {
-            return status;
-        }
+    // =========================================================
+    // CONVERT ENTITY → DTO
+    // =========================================================
 
-        public void setStatus(JobStatus status) {
-            this.status = status;
-        }
+    private JobDTO.Response convertToResponse(Job job) {
 
-        public LocalDateTime getCreatedAt() {
-            return createdAt;
-        }
+        return new JobDTO.Response(
+                job.getId(),
 
-        public void setCreatedAt(LocalDateTime createdAt) {
-            this.createdAt = createdAt;
-        }
+                job.getCustomer().getId(),
+                job.getCustomer().getName(),
 
-        public LocalDateTime getUpdatedAt() {
-            return updatedAt;
-        }
+                job.getWorker().getId(),
+                job.getWorker().getName(),
 
-        public void setUpdatedAt(LocalDateTime updatedAt) {
-            this.updatedAt = updatedAt;
-        }
+                job.getService().getId(),
+                job.getService().getName(),
+
+                job.getDescription(),
+                job.getImageUrl(),
+
+                job.getStatus(),
+
+                job.getCreatedAt(),
+                job.getUpdatedAt()
+        );
+    }
+
+    // =========================================================
+    // GET CURRENT USER ID
+    // =========================================================
+
+    private Long getCurrentUserId() {
+
+        Authentication authentication =
+                SecurityContextHolder
+                        .getContext()
+                        .getAuthentication();
+
+        return (Long) authentication.getDetails();
     }
 }

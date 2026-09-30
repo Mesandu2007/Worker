@@ -14,19 +14,19 @@ public class Job {
     private Long id;
 
 
-    // Customer who requested the job
+    
     @ManyToOne
     @JoinColumn(name = "customer_id", nullable = false)
     private Customer customer;
 
 
-    // Worker selected for the job
+    
     @ManyToOne
     @JoinColumn(name = "worker_id", nullable = false)
     private Worker worker;
 
 
-    // Service requested
+    
     @ManyToOne
     @JoinColumn(name = "service_id", nullable = false)
     private Service service;
@@ -36,7 +36,7 @@ public class Job {
     private String description;
 
 
-    // Optional image of the problem
+    
     private String imageUrl;
 
 
@@ -45,20 +45,24 @@ public class Job {
     private JobStatus status = JobStatus.PENDING;
 
 
-    // When the job was requested
+    
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
 
-    // When the worker accepts the job
+    
     private LocalDateTime acceptedAt;
 
 
-    // When the worker starts the job
+
+    private LocalDateTime updatedAt;
+
+
+
     private LocalDateTime startedAt;
 
 
-    // When the worker completes the job
+    
     private LocalDateTime completedAt;
 
 
@@ -87,11 +91,18 @@ public class Job {
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
+        updatedAt=LocalDateTime.now();
 
         if (status == null) {
             status = JobStatus.PENDING;
         }
     }
+    @PreUpdate
+        protected void onUpdate() {
+            updatedAt = LocalDateTime.now();
+    }
+
+
 
 
     // Getters and Setters
@@ -193,4 +204,14 @@ public class Job {
     public void setCompletedAt(LocalDateTime completedAt) {
         this.completedAt = completedAt;
     }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
+    }
+
+
 }
